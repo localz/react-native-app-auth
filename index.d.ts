@@ -104,6 +104,8 @@ export interface RefreshConfiguration {
   refreshToken: string;
 }
 
+export function enableBrowserWhitelist(value: boolean): Promise<boolean>;
+
 export function prefetchConfiguration(config: AuthConfiguration): Promise<void>;
 
 export function register(config: RegistrationConfiguration): Promise<RegistrationResponse>;

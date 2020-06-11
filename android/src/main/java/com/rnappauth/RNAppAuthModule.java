@@ -43,6 +43,8 @@ import net.openid.appauth.RegistrationResponse;
 import net.openid.appauth.ResponseTypeValues;
 import net.openid.appauth.TokenResponse;
 import net.openid.appauth.TokenRequest;
+import net.openid.appauth.browser.BrowserWhitelist;
+import net.openid.appauth.browser.VersionedBrowserMatcher;
 import net.openid.appauth.connectivity.ConnectionBuilder;
 import net.openid.appauth.connectivity.DefaultConnectionBuilder;
 
@@ -69,11 +71,18 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
     private String clientSecret;
     private final ConcurrentHashMap<String, AuthorizationServiceConfiguration> mServiceConfigurations = new ConcurrentHashMap<>();
     private boolean isPrefetched = false;
+    private boolean whitelistBrowsers = false;
 
     public RNAppAuthModule(ReactApplicationContext reactContext) {
         super(reactContext);
         this.reactContext = reactContext;
         reactContext.addActivityEventListener(this);
+    }
+
+    @ReactMethod
+    public void enableBrowserWhitelist(final boolean value, final Promise promise) {
+        this.whitelistBrowsers = value;
+        promise.resolve(true);
     }
 
     @ReactMethod
@@ -469,7 +478,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         if (tokenEndpointAuthMethod != null) {
             registrationRequestBuilder.setTokenEndpointAuthenticationMethod(tokenEndpointAuthMethod);
         }
-        
+
         RegistrationRequest registrationRequest = registrationRequestBuilder.build();
 
         AuthorizationService.RegistrationResponseCallback registrationResponseCallback = new AuthorizationService.RegistrationResponseCallback() {
@@ -698,10 +707,22 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
      * Create an App Auth configuration using the provided connection builder
      */
     private AppAuthConfiguration createAppAuthConfiguration(ConnectionBuilder connectionBuilder) {
-        return new AppAuthConfiguration
-                .Builder()
-                .setConnectionBuilder(connectionBuilder)
-                .build();
+
+        AppAuthConfiguration.Builder config = new AppAuthConfiguration.Builder().setConnectionBuilder(connectionBuilder);
+
+        if (this.whitelistBrowsers) {
+            BrowserWhitelist whitelist = new BrowserWhitelist(
+                    VersionedBrowserMatcher.CHROME_CUSTOM_TAB,
+                    VersionedBrowserMatcher.FIREFOX_CUSTOM_TAB,
+                    VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB,
+                    VersionedBrowserMatcher.CHROME_BROWSER,
+                    VersionedBrowserMatcher.FIREFOX_BROWSER,
+                    VersionedBrowserMatcher.SAMSUNG_BROWSER
+            );
+            config.setBrowserMatcher(whitelist);
+        }
+
+        return config.build();
     }
 
     /*

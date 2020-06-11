@@ -272,3 +272,10 @@ export const revoke = async (
     throw new Error('Failed to revoke token', error);
   });
 };
+
+export const enableBrowserWhitelist = async (value = false) => {
+  if (Platform.OS === 'android') {
+    return RNAppAuth.enableBrowserWhitelist(value)
+  }
+  return Promise.resolve(true)
+}
