@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/FormidableLabs/react-native-app-auth/master/docs/react-native-app-auth-logo.png" width=224></p>
+<p align="center"><img src="https://raw.githubusercontent.com/FormidableLabs/react-native-app-auth/main/docs/react-native-app-auth-logo.png" width=224></p>
 <h2 align="center">React Native App Auth</h2>
 <p align="center">
 <strong>React native bridge for AppAuth - an SDK for communicating with OAuth2 providers</strong>
@@ -17,12 +17,15 @@ React Native bridge for [AppAuth-iOS](https://github.com/openid/AppAuth-iOS) and
 This library _should_ support any OAuth provider that implements the
 [OAuth2 spec](https://tools.ietf.org/html/rfc6749#section-2.2).
 
-### Tested OpenID providers:
+We only support the [Authorization Code Flow](https://oauth.net/2/grant-types/authorization-code/).
+
+### Tested OpenID providers
 
 These providers are OpenID compliant, which means you can use [autodiscovery](https://openid.net/specs/openid-connect-discovery-1_0.html).
 
 - [Identity Server4](https://demo.identityserver.io/) ([Example configuration](./docs/config-examples/identity-server-4.md))
 - [Identity Server3](https://github.com/IdentityServer/IdentityServer3.md) ([Example configuration](./docs/config-examples/identity-server-3.md))
+- [FusionAuth](https://fusionauth.io) ([Example configuration](./docs/config-examples/fusionauth.md))
 - [Google](https://developers.google.com/identity/protocols/OAuth2)
   ([Example configuration](./docs/config-examples/google.md))
 - [Okta](https://developer.okta.com) ([Example configuration](./docs/config-examples/okta.md))
@@ -30,7 +33,7 @@ These providers are OpenID compliant, which means you can use [autodiscovery](ht
 - [Azure Active Directory](https://docs.microsoft.com/en-us/azure/active-directory) ([Example configuration](./docs/config-examples/azure-active-directory.md))
 - [AWS Cognito](https://eu-west-1.console.aws.amazon.com/cognito) ([Example configuration](./docs/config-examples/aws-cognito.md))
 
-### Tested OAuth2 providers:
+### Tested OAuth2 providers
 
 These providers implement the OAuth2 spec, but are not OpenID providers, which means you must configure the authorization and token endpoints yourself.
 
@@ -128,10 +131,11 @@ with optional overrides.
   - **register** - (`{ [key: string]: value }`) headers to be passed during registration request.
 - **useNonce** - (`boolean`) _IOS_ (default: true) optionally allows not sending the nonce parameter, to support non-compliant providers
 - **usePKCE** - (`boolean`) (default: true) optionally allows not sending the code_challenge parameter and skipping PKCE code verification, to support non-compliant providers.
+- **skipCodeExchange** - (`boolean`) (default: false) just return the authorization response, instead of automatically exchanging the authorization code. This is useful if this exchange needs to be done manually (not client-side)
 
 #### result
 
-This is the result from the auth server
+This is the result from the auth server:
 
 - **accessToken** - (`string`) the access token
 - **accessTokenExpirationDate** - (`string`) the token expiration date
@@ -141,6 +145,7 @@ This is the result from the auth server
 - **refreshToken** - (`string`) the refresh token
 - **tokenType** - (`string`) the token type, e.g. Bearer
 - **scopes** - ([`string`]) the scopes the user has agreed to be granted
+- **authorizationCode** - (`string`) the authorization code (only if `skipCodeExchange=true`)
 
 ### `refresh`
 
@@ -249,14 +254,14 @@ are not distributed as part of the bridge.
 
 AppAuth supports three options for dependency management.
 
-1.  **CocoaPods**
+1. **CocoaPods**
 
     ```sh
     cd ios
     pod install
     ```
 
-2.  **Carthage**
+2. **Carthage**
 
     With [Carthage](https://github.com/Carthage/Carthage), add the following line to your `Cartfile`:
 
@@ -268,7 +273,7 @@ AppAuth supports three options for dependency management.
 
     Add a copy files build step for `AppAuth.framework`: open Build Phases on Xcode, add a new "Copy Files" phase, choose "Frameworks" as destination, add `AppAuth.framework` and ensure "Code Sign on Copy" is checked.
 
-3.  **Static Library**
+3. **Static Library**
 
     You can also use [AppAuth-iOS](https://github.com/openid/AppAuth-iOS) as a static library. This
     requires linking the library and your project and including the headers. Suggested configuration:
@@ -330,16 +335,45 @@ Add the following code to `AppDelegate.m` (to support iOS 10 and below)
 + }
 ```
 
+If you want to support universal links, add the following to `AppDelegate.m` under `continueUserActivity`
+
+```diff
++ if ([userActivity.activityType isEqualToString:NSUserActivityTypeBrowsingWeb]) {
++   if (self.authorizationFlowManagerDelegate) {
++     BOOL resumableAuth = [self.authorizationFlowManagerDelegate resumeExternalUserAgentFlowWithURL:userActivity.webpageURL];
++     if (resumableAuth) {
++       return YES;
++     }
++   }
++ }
+```
+
 #### Integration of the library with a Swift iOS project
 
-The approach mentioned above should also be possible to employ with Swift. In this case one should have to import `RNAppAuth`
-and make `AppDelegate` conform to `RNAppAuthAuthorizationFlowManager`. Note that this has not been tested.
-`AppDelegate.swift` should look something like this:
+The approach mentioned should work with Swift. In this case one should make `AppDelegate` conform to `RNAppAuthAuthorizationFlowManager`. Note that this is not tested/guaranteed by the maintainers.
+
+Steps:
+
+1. `swift-Bridging-Header.h` should include a reference to `#import "RNAppAuthAuthorizationFlowManager.h`, like so:
+
+```h
+#import <React/RCTBundleURLProvider.h>
+#import <React/RCTRootView.h>
+#import <React/RCTBridgeDelegate.h>
+#import <React/RCTBridge.h>
+#import "RNAppAuthAuthorizationFlowManager.h" // <-- Add this header
+#if DEBUG
+#import <FlipperKit/FlipperClient.h>
+// etc...
+```
+
+2. `AppDelegate.swift` should implement the `RNAppAuthorizationFlowManager` protocol and have a handler for url deep linking. The result should look something like this:
 
 ```swift
-@import RNAppAuth
-class AppDelegate: UIApplicationDelegate, RNAppAuthAuthorizationFlowManager {
-  public weak var authorizationFlowManagerDelegate: RNAppAuthAuthorizationFlowManagerDelegate?
+@UIApplicationMain
+class AppDelegate: UIApplicationDelegate, RNAppAuthAuthorizationFlowManager { //<-- note the additional RNAppAuthAuthorizationFlowManager protocol
+  public weak var authorizationFlowManagerDelegate: RNAppAuthAuthorizationFlowManagerDelegate? // <-- this property is required by the protocol
+  //"open url" delegate function for managing deep linking needs to call the resumeExternalUserAgentFlowWithURL method
   func application(
       _ app: UIApplication,
       open url: URL,
@@ -395,6 +429,11 @@ try {
 
 ## Error messages
 
+Values are in the `code` field of the rejected Error object.
+
+- OAuth Authorization [error codes](https://tools.ietf.org/html/rfc6749#section-4.1.2.1)
+- OAuth Access Token [error codes](https://tools.ietf.org/html/rfc6749#section-5.2)
+- OpendID Connect Registration [error codes](https://openid.net/specs/openid-connect-registration-1_0.html#RegistrationError)
 - `service_configuration_fetch_error` - could not fetch the service configuration
 - `authentication_failed` - user authentication failed
 - `token_refresh_failed` - could not exchange the refresh token for a new JWT

@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.browser.customtabs.CustomTabsCallback;
 import androidx.browser.customtabs.CustomTabsClient;
 import androidx.browser.customtabs.CustomTabsServiceConnection;
+import androidx.browser.customtabs.CustomTabsSession;
 
 import com.facebook.react.bridge.ActivityEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -63,6 +64,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
     private final ReactApplicationContext reactContext;
     private Promise promise;
     private boolean dangerouslyAllowInsecureHttpRequests;
+    private Boolean skipCodeExchange;
     private String clientAuthMethod = "basic";
     private Map<String, String> registrationRequestHeaders = null;
     private Map<String, String> authorizationRequestHeaders = null;
@@ -192,7 +194,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
                                 @Nullable AuthorizationServiceConfiguration fetchedConfiguration,
                                 @Nullable AuthorizationException ex) {
                             if (ex != null) {
-                                promise.reject("service_configuration_fetch_error", getErrorMessage(ex));
+                                promise.reject("service_configuration_fetch_error", ex.getLocalizedMessage(), ex);
                                 return;
                             }
 
@@ -224,6 +226,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             final ReadableArray scopes,
             final ReadableMap additionalParameters,
             final ReadableMap serviceConfiguration,
+            final Boolean skipCodeExchange,
             final Boolean usePKCE,
             final String clientAuthMethod,
             final boolean dangerouslyAllowInsecureHttpRequests,
@@ -241,6 +244,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         this.additionalParametersMap = additionalParametersMap;
         this.clientSecret = clientSecret;
         this.clientAuthMethod = clientAuthMethod;
+        this.skipCodeExchange = skipCodeExchange;
 
         // when serviceConfiguration is provided, we don't need to hit up the OpenID well-known id endpoint
         if (serviceConfiguration != null || hasServiceConfiguration(issuer)) {
@@ -269,7 +273,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
                                 @Nullable AuthorizationServiceConfiguration fetchedConfiguration,
                                 @Nullable AuthorizationException ex) {
                             if (ex != null) {
-                                promise.reject("service_configuration_fetch_error", getErrorMessage(ex));
+                                promise.reject("service_configuration_fetch_error", ex.getLocalizedMessage(), ex);
                                 return;
                             }
 
@@ -353,7 +357,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
                                 @Nullable AuthorizationServiceConfiguration fetchedConfiguration,
                                 @Nullable AuthorizationException ex) {
                             if (ex != null) {
-                                promise.reject("service_configuration_fetch_error", getErrorMessage(ex));
+                                promise.reject("service_configuration_fetch_error", ex.getLocalizedMessage(), ex);
                                 return;
                             }
 
@@ -395,10 +399,17 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             AuthorizationException exception = AuthorizationException.fromIntent(data);
             if (exception != null) {
                 if (promise != null) {
-                    promise.reject("authentication_error", getErrorMessage(exception));
+                    promise.reject(exception.error != null ? exception.error: "authentication_error", exception.getLocalizedMessage(), exception);
                 }
                 return;
             }
+
+            if (this.skipCodeExchange) {
+                WritableMap map = TokenResponseFactory.authorizationResponseToMap(response);
+                promise.resolve(map);
+                return;
+            }
+
 
             final Promise authorizePromise = this.promise;
             final AppAuthConfiguration configuration = createAppAuthConfiguration(
@@ -421,7 +432,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
                         }
                     } else {
                         if (promise != null) {
-                            promise.reject("token_exchange_failed", getErrorMessage(ex));
+                            promise.reject(ex.error != null ? ex.error: "token_exchange_failed", ex.getLocalizedMessage(), ex);
                         }
                     }
                 }
@@ -488,7 +499,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
                     WritableMap map = RegistrationResponseFactory.registrationResponseToMap(response);
                     promise.resolve(map);
                 } else {
-                    promise.reject("registration_failed", getErrorMessage(ex));
+                    promise.reject(ex.error != null ? ex.error: "registration_failed", ex.getLocalizedMessage(), ex);
                 }
             }
         };
@@ -619,7 +630,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
                     WritableMap map = TokenResponseFactory.tokenResponseToMap(response);
                     promise.resolve(map);
                 } else {
-                    promise.reject("token_refresh_failed", getErrorMessage(ex));
+                    promise.reject(ex.error != null ? ex.error: "token_refresh_failed", ex.getLocalizedMessage(), ex);
                 }
             }
         };
@@ -656,15 +667,6 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         }
 
         return new ClientSecretBasic(clientSecret);
-    }
-
-    /*
-     * Return error information if it is available
-     */
-    private String getErrorMessage(AuthorizationException ex){
-        if(ex.errorDescription == null && ex.error != null)
-            return ex.error;
-        return ex.errorDescription;
     }
 
     /*
@@ -783,7 +785,11 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             @Override
             public void onCustomTabsServiceConnected(ComponentName name, CustomTabsClient client) {
                 client.warmup(0);
-                client.newSession(new CustomTabsCallback()).mayLaunchUrl(Uri.parse(issuer), null, Collections.<Bundle>emptyList());
+                CustomTabsSession session = client.newSession(new CustomTabsCallback());
+                if (session == null) {
+                    return;
+                }
+                session.mayLaunchUrl(Uri.parse(issuer), null, Collections.<Bundle>emptyList());
             }
 
             @Override
