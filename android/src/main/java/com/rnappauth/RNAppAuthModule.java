@@ -714,9 +714,6 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
 
         if (this.whitelistBrowsers) {
             BrowserWhitelist whitelist = new BrowserWhitelist(
-                    VersionedBrowserMatcher.CHROME_CUSTOM_TAB,
-                    VersionedBrowserMatcher.FIREFOX_CUSTOM_TAB,
-                    VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB,
                     VersionedBrowserMatcher.CHROME_BROWSER,
                     VersionedBrowserMatcher.FIREFOX_BROWSER,
                     VersionedBrowserMatcher.SAMSUNG_BROWSER
